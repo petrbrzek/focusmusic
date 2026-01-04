@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Simple CLI version - NO OpenTUI dependency
- * Used to test if audio issues are related to OpenTUI or the audio engine itself.
+ * focusmusic - Infinite generative focus music for deep work
  */
 
 import { parseArgs } from 'util';
@@ -11,7 +10,28 @@ import { PadLayer } from './layers/pad';
 import { ArpLayer } from './layers/arp';
 import { BeatLayer } from './layers/beat';
 import { TextureLayer } from './layers/texture';
-import { logDiagnostics } from './diagnostics';
+
+// ANSI escape codes
+const c = {
+  reset: '\x1b[0m',
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  
+  // Cursor
+  hideCursor: '\x1b[?25l',
+  showCursor: '\x1b[?25h',
+  
+  // Colors
+  purple: '\x1b[38;5;141m',
+  green: '\x1b[38;5;78m',
+  yellow: '\x1b[38;5;221m',
+  red: '\x1b[38;5;203m',
+  blue: '\x1b[38;5;117m',
+  pink: '\x1b[38;5;218m',
+  gray: '\x1b[38;5;245m',
+  darkGray: '\x1b[38;5;239m',
+  white: '\x1b[38;5;253m',
+};
 
 // Track length range (8-15 minutes, randomized per track)
 const MIN_TRACK_LENGTH = 8 * 60;
@@ -38,23 +58,23 @@ function formatTime(seconds: number): string {
 
 function printHelp() {
   console.log(`
-  focusmusic (simple mode) - deep generative electronic music
+  ${c.bold}${c.purple}focusmusic${c.reset} - deep generative electronic music
 
-  Usage: bun run src/simple.ts [options]
+  ${c.dim}Usage:${c.reset} focusmusic [options]
 
-  Options:
+  ${c.dim}Options:${c.reset}
     --bpm <number>      Set tempo (70-120, default: 88)
     --volume <number>   Master volume (0-100, default: 75)
-    --debug             Show node/memory diagnostics every 5s
     --help, -h          Show this help message
 
-  Controls:
-    n           Next track
-    q           Quit
+  ${c.dim}Controls:${c.reset}
+    n / Space           Next track
+    q / Escape          Quit
 
-  Examples:
-    bun run src/simple.ts              # Start with default settings
-    bun run src/simple.ts --bpm 95     # Slightly faster tempo
+  ${c.dim}Examples:${c.reset}
+    focusmusic              # Start with default settings
+    focusmusic --bpm 95     # Slightly faster tempo
+    focusmusic --volume 50  # Quieter for background listening
   `);
 }
 
@@ -98,22 +118,57 @@ function stopLayers(layers: AudioLayers): Promise<void> {
   });
 }
 
-function printTrackInfo(layers: AudioLayers, trackLength: number) {
+function clearScreen() {
+  // Clear screen and move cursor to top-left
+  process.stdout.write('\x1b[2J\x1b[H');
+}
+
+function hideCursor() {
+  process.stdout.write(c.hideCursor);
+}
+
+function showCursor() {
+  process.stdout.write(c.showCursor);
+}
+
+function printTrackInfo(layers: AudioLayers, trackLength: number, status: 'playing' | 'switching' | 'stopping' = 'playing') {
   const state = layers.engine.state;
   const config = layers.engine.config;
   
-  console.log('\n----------------------------------------');
-  console.log('  focusmusic - simple mode');
-  console.log('----------------------------------------');
-  console.log(`  Scale:    ${state.scaleName}`);
-  console.log(`  Root:     ${midiToNoteName(state.root)} (${state.root})`);
-  console.log(`  BPM:      ${config.bpm}`);
-  console.log(`  Kit:      ${state.kitName || 'Loading...'}`);
-  console.log(`  Synth:    ${state.synthName || 'Loading...'}`);
-  console.log(`  Length:   ${formatTime(trackLength)}`);
-  console.log('----------------------------------------');
-  console.log('  Controls: [n] Next  [q] Quit');
-  console.log('----------------------------------------\n');
+  const statusIcon = status === 'playing' ? `${c.green}▶${c.reset}` 
+                   : status === 'switching' ? `${c.yellow}◆${c.reset}`
+                   : `${c.red}■${c.reset}`;
+  const statusText = status === 'playing' ? 'Playing' 
+                   : status === 'switching' ? 'Switching...'
+                   : 'Stopping...';
+
+  clearScreen();
+  
+  console.log(`
+  ${c.bold}${c.purple}focusmusic${c.reset}
+  ${c.darkGray}────────────────────────────────${c.reset}
+
+  ${statusIcon} ${c.gray}${statusText}${c.reset}
+
+  ${c.gray}Scale:${c.reset}  ${c.white}${state.scaleName}${c.reset}
+  ${c.gray}Root:${c.reset}   ${c.white}${midiToNoteName(state.root)}${c.reset} ${c.dim}(${state.root})${c.reset}
+  ${c.gray}BPM:${c.reset}    ${c.white}${config.bpm}${c.reset}
+  ${c.gray}Kit:${c.reset}    ${c.blue}${state.kitName || 'Loading...'}${c.reset}
+  ${c.gray}Synth:${c.reset}  ${c.pink}${state.synthName || 'Loading...'}${c.reset}
+
+  ${c.darkGray}────────────────────────────────${c.reset}
+  ${c.darkGray}[${c.purple}n${c.darkGray}]${c.reset} ${c.gray}Next${c.reset}  ${c.darkGray}[${c.purple}q${c.darkGray}]${c.reset} ${c.gray}Quit${c.reset}
+`);
+}
+
+function updateProgress(elapsed: number, trackLength: number) {
+  const progress = Math.min(1, elapsed / trackLength);
+  const barWidth = 24;
+  const filledWidth = Math.floor(progress * barWidth);
+  const progressBar = `${c.purple}${'━'.repeat(filledWidth)}${c.darkGray}${'─'.repeat(barWidth - filledWidth)}${c.reset}`;
+  
+  // Overwrite the progress line
+  process.stdout.write(`\r  ${progressBar} ${c.gray}${formatTime(elapsed)}${c.darkGray} / ${c.gray}${formatTime(trackLength)}${c.reset}  `);
 }
 
 async function main() {
@@ -122,7 +177,6 @@ async function main() {
     options: {
       bpm: { type: 'string' },
       volume: { type: 'string' },
-      debug: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
   });
@@ -157,37 +211,28 @@ async function main() {
   let trackLength = getRandomTrackLength();
   let startTime = Date.now();
   let isQuitting = false;
-
-  // Print initial info (with small delay for layer names to populate)
-  setTimeout(() => {
-    printTrackInfo(layers, trackLength);
-  }, 150);
+  let isTransitioning = false;
 
   // Setup raw keyboard input
   readline.emitKeypressEvents(process.stdin);
   if (process.stdin.isTTY) {
     process.stdin.setRawMode(true);
   }
+  
+  // Hide cursor for cleaner UI
+  hideCursor();
 
-  // Diagnostics interval - log every 5 seconds (only if --debug flag is set)
-  let diagInterval: ReturnType<typeof setInterval> | undefined;
-  if (values.debug) {
-    diagInterval = setInterval(() => {
-      if (isQuitting) return;
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      logDiagnostics(elapsed);
-    }, 5000);
-  }
+  // Print initial info (with small delay for layer names to populate)
+  setTimeout(() => {
+    printTrackInfo(layers, trackLength, 'playing');
+  }, 150);
 
   // Progress update interval
   const progressInterval = setInterval(() => {
-    if (isQuitting) return;
+    if (isQuitting || isTransitioning) return;
     
     const elapsed = Math.floor((Date.now() - startTime) / 1000);
-    const remaining = Math.max(0, trackLength - elapsed);
-    
-    // Simple progress line (overwrites itself)
-    process.stdout.write(`\r  Playing: ${formatTime(elapsed)} / ${formatTime(trackLength)}  `);
+    updateProgress(elapsed, trackLength);
     
     // Auto-advance when track ends
     if (elapsed >= trackLength) {
@@ -196,18 +241,20 @@ async function main() {
   }, 1000);
 
   async function handleNext() {
-    if (isQuitting) return;
+    if (isQuitting || isTransitioning) return;
+    isTransitioning = true;
     
-    console.log('\n\n  Switching track...\n');
+    printTrackInfo(layers, trackLength, 'switching');
     
     await stopLayers(layers);
     
     layers = createLayers(config);
     trackLength = getRandomTrackLength();
     startTime = Date.now();
+    isTransitioning = false;
     
     setTimeout(() => {
-      printTrackInfo(layers, trackLength);
+      printTrackInfo(layers, trackLength, 'playing');
     }, 150);
   }
 
@@ -216,25 +263,26 @@ async function main() {
     isQuitting = true;
     
     clearInterval(progressInterval);
-    if (diagInterval) clearInterval(diagInterval);
-    console.log('\n\n  Stopping...\n');
+    printTrackInfo(layers, trackLength, 'stopping');
     
     await stopLayers(layers);
     
     // Restore terminal
+    showCursor();
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(false);
     }
     
-    console.log('  Goodbye!\n');
+    clearScreen();
+    console.log(`\n  ${c.purple}Goodbye!${c.reset}\n`);
     process.exit(0);
   }
 
   // Handle keypresses
-  process.stdin.on('keypress', (str, key) => {
+  process.stdin.on('keypress', (_str, key) => {
     if (isQuitting) return;
     
-    if (key.name === 'q' || (key.ctrl && key.name === 'c')) {
+    if (key.name === 'q' || key.name === 'escape' || (key.ctrl && key.name === 'c')) {
       handleQuit();
     } else if (key.name === 'n' || key.name === 'space') {
       handleNext();

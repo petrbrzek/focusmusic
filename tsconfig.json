@@ -5,8 +5,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleDetection": "force",
-    "jsx": "react-jsx",
-    "jsxImportSource": "@opentui/react",
+
     "allowJs": true,
 
     // Bundler mode

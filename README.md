@@ -10,7 +10,7 @@ Infinite generative focus music for deep work. Brain.fm-style ambient electronic
 - **8 synth presets** - Warm Pad, Soft Pluck, Glassy, Analog Lead, Sub Pulse, Shimmer, Muted Keys, Hollow
 - **Perlin noise modulation** - Smooth, organic parameter changes
 - **Auto-advancement** - Tracks automatically transition every 8-15 minutes
-- **Terminal UI** - Beautiful interface powered by OpenTUI
+- **Terminal UI** - Clean, minimal interface with ANSI colors
 
 ## Installation
 
@@ -95,24 +95,11 @@ Each track randomly selects:
 - Drum kit style
 - Synth preset (15% chance of no arp for minimal tracks)
 
-## Simple Mode
-
-For testing or minimal environments, a simple CLI mode is available without the fancy UI:
-
-```bash
-bun run simple
-
-# With debug diagnostics
-bun run simple --debug
-```
-
 ## Tech Stack
 
 - [Bun](https://bun.sh) - JavaScript runtime
 - [node-web-audio-api](https://github.com/ircam-ismm/node-web-audio-api) - Web Audio API for Node.js
-- [OpenTUI](https://github.com/anthropics/opentui) - Terminal UI framework
 - [simplex-noise](https://github.com/jwagner/simplex-noise.js) - Perlin/Simplex noise generation
-- [React](https://react.dev) - UI components
 
 ## License
 
