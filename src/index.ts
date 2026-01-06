@@ -63,7 +63,7 @@ function printHelp() {
   ${c.dim}Usage:${c.reset} focusmusic [options]
 
   ${c.dim}Options:${c.reset}
-    --bpm <number>      Set tempo (70-120, default: 88)
+    --bpm <number>      Set tempo (70-120, default: 89)
     --volume <number>   Master volume (0-100, default: 75)
     --latency <mode>    Audio latency: interactive | balanced | playback (default: playback)
     --diagnostics       Print scheduler headroom warnings (helps debug crackles)
