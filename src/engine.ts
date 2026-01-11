@@ -30,22 +30,22 @@ export class Engine {
   ctx: AudioContext;
   clock: Clock;
   mods: ModulationBank;
-  
+
   // Audio routing
   master: GainNode;
   compressor: DynamicsCompressorNode;
   mainBus: GainNode;
   reverbSend: GainNode;
   reverbReturn: GainNode;
-  
+
   // Sidechain ducking
   sidechainGain: GainNode;
   private duckAmount = 0.65;
   private duckRelease = 0.12;
-  
+
   config: EngineConfig;
   state: MusicState;
-  
+
   private layers: ClockListener[] = [];
 
   constructor(config: Partial<EngineConfig> = {}) {
@@ -68,16 +68,16 @@ export class Engine {
       { debug: !!this.config.debug }
     );
     this.mods = new ModulationBank();
-    
+
     // Initialize music state
     this.state = this.initMusicState();
-    
+
     // Setup modulation sources
     this.setupModulation();
-    
+
     // Build audio graph
     this.master = new GainNode(this.ctx, { gain: this.config.volume / 100 });
-    
+
     this.compressor = new DynamicsCompressorNode(this.ctx, {
       threshold: -18,
       knee: 12,
@@ -85,18 +85,18 @@ export class Engine {
       attack: 0.003,
       release: 0.15,
     });
-    
+
     // Sidechain gain node - kick will duck this
     this.sidechainGain = new GainNode(this.ctx, { gain: 1 });
-    
+
     // Main bus for melodic content
     this.mainBus = new GainNode(this.ctx, { gain: 1 });
-    
+
     // Simple reverb using delays
     const { reverbSend, reverbReturn } = this.createReverb();
     this.reverbSend = reverbSend;
     this.reverbReturn = reverbReturn;
-    
+
     // Routing
     this.mainBus.connect(this.sidechainGain);
     this.mainBus.connect(this.reverbSend);
@@ -109,7 +109,7 @@ export class Engine {
   private createReverb() {
     const reverbSend = new GainNode(this.ctx, { gain: 0.3 });
     const reverbReturn = new GainNode(this.ctx, { gain: 0.5 });
-    
+
     // Multi-tap delay reverb
     const delays = [0.03, 0.05, 0.08, 0.13];
     const feedback = new GainNode(this.ctx, { gain: 0.4 });
@@ -118,7 +118,7 @@ export class Engine {
       frequency: 2000,
       Q: 0.5,
     });
-    
+
     delays.forEach((time, i) => {
       const delay = new DelayNode(this.ctx, { delayTime: time });
       const gain = new GainNode(this.ctx, { gain: 0.3 / (i + 1) });
@@ -126,11 +126,11 @@ export class Engine {
       delay.connect(gain);
       gain.connect(filter);
     });
-    
+
     filter.connect(feedback);
     feedback.connect(reverbSend);
     filter.connect(reverbReturn);
-    
+
     return { reverbSend, reverbReturn };
   }
 
@@ -142,16 +142,16 @@ export class Engine {
       'phrygian',
       'aeolian',
     ];
-    
+
     const scaleName = goodScales[Math.floor(Math.random() * goodScales.length)];
     const scale = SCALES[scaleName];
-    
+
     // Deep bass roots (D2-A2 range)
     const roots = [38, 40, 41, 43, 45];
     const root = roots[Math.floor(Math.random() * roots.length)];
-    
+
     const notes = getScaleNotes(root, [...scale], 4);
-    
+
     return { root, scale: [...scale], scaleName, notes, kitName: '', synthName: '' };
   }
 
@@ -216,11 +216,11 @@ export class Engine {
 
   stop() {
     this.clock.stop();
-    
+
     const now = this.ctx.currentTime;
     this.master.gain.setValueAtTime(this.master.gain.value, now);
     this.master.gain.linearRampToValueAtTime(0, now + 2);
-    
+
     setTimeout(() => {
       this.ctx.close();
     }, 2500);
