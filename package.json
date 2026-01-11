@@ -38,7 +38,8 @@
   },
   "scripts": {
     "start": "bun run src/index.ts",
-    "dev": "bun run --watch src/index.ts"
+    "dev": "bun run --watch src/index.ts",
+    "build:bridge": "./scripts/build-bridge.sh"
   },
   "devDependencies": {
     "@types/bun": "latest"

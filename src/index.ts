@@ -6,6 +6,7 @@
 import { parseArgs } from 'util';
 import * as readline from 'readline';
 import { Engine, type EngineConfig } from './engine';
+import { MediaBridge, type BridgeStatus } from './bridge';
 import { PadLayer } from './layers/pad';
 import { ArpLayer } from './layers/arp';
 import { BeatLayer } from './layers/beat';
@@ -16,11 +17,11 @@ const c = {
   reset: '\x1b[0m',
   bold: '\x1b[1m',
   dim: '\x1b[2m',
-  
+
   // Cursor
   hideCursor: '\x1b[?25l',
   showCursor: '\x1b[?25h',
-  
+
   // Colors
   purple: '\x1b[38;5;141m',
   green: '\x1b[38;5;78m',
@@ -116,7 +117,7 @@ function stopLayers(layers: AudioLayers): Promise<void> {
     layers.arp.stop();
     layers.beat.stop();
     layers.engine.stop();
-    
+
     setTimeout(resolve, 2500);
   });
 }
@@ -139,16 +140,16 @@ function printTrackInfo(layers: AudioLayers, trackLength: number, status: 'playi
   const config = layers.engine.config;
 
   const statusIcon = status === 'playing' ? `${c.green}▶${c.reset}`
-                   : status === 'paused' ? `${c.yellow}⏸${c.reset}`
-                   : status === 'switching' ? `${c.yellow}◆${c.reset}`
-                   : `${c.red}■${c.reset}`;
+    : status === 'paused' ? `${c.yellow}⏸${c.reset}`
+      : status === 'switching' ? `${c.yellow}◆${c.reset}`
+        : `${c.red}■${c.reset}`;
   const statusText = status === 'playing' ? 'Playing'
-                   : status === 'paused' ? 'Paused'
-                   : status === 'switching' ? 'Switching...'
-                   : 'Stopping...';
+    : status === 'paused' ? 'Paused'
+      : status === 'switching' ? 'Switching...'
+        : 'Stopping...';
 
   clearScreen();
-  
+
   console.log(`
   ${c.bold}${c.purple}focusmusic${c.reset}
   ${c.darkGray}────────────────────────────────${c.reset}
@@ -171,7 +172,7 @@ function updateProgress(elapsed: number, trackLength: number) {
   const barWidth = 24;
   const filledWidth = Math.floor(progress * barWidth);
   const progressBar = `${c.purple}${'━'.repeat(filledWidth)}${c.darkGray}${'─'.repeat(barWidth - filledWidth)}${c.reset}`;
-  
+
   // Overwrite the progress line
   process.stdout.write(`\r  ${progressBar} ${c.gray}${formatTime(elapsed)}${c.darkGray} / ${c.gray}${formatTime(trackLength)}${c.reset}  `);
 }
@@ -246,18 +247,40 @@ async function main() {
   let isTransitioning = false;
   let pausedTime = 0; // Accumulated time spent paused
 
+  // macOS Media Bridge setup
+  const bridge = new MediaBridge({
+    onPlay: () => { if (layers.engine.paused) handlePause(); },
+    onPause: () => { if (!layers.engine.paused) handlePause(); },
+    onToggle: () => handlePause(),
+    onNext: () => handleNext()
+  });
+
+  function updateBridge(status: BridgeStatus) {
+    // Calculate elapsed time
+    const elapsed = Math.floor((Date.now() - startTime - pausedTime) / 1000);
+
+    bridge.update({
+      title: layers.engine.state.kitName || 'Focus Mode',
+      artist: 'focusmusic',
+      duration: trackLength,
+      elapsed: elapsed,
+      status: status
+    });
+  }
+
   // Setup raw keyboard input
   readline.emitKeypressEvents(process.stdin);
   if (process.stdin.isTTY) {
     process.stdin.setRawMode(true);
   }
-  
+
   // Hide cursor for cleaner UI
   hideCursor();
 
   // Print initial info (with small delay for layer names to populate)
   setTimeout(() => {
     printTrackInfo(layers, trackLength, 'playing');
+    updateBridge('playing');
   }, 150);
 
   // Progress update interval
@@ -289,6 +312,7 @@ async function main() {
 
     setTimeout(() => {
       printTrackInfo(layers, trackLength, 'playing');
+      updateBridge('playing');
     }, 150);
   }
 
@@ -301,6 +325,7 @@ async function main() {
       pausedTime += Date.now() - pauseStartTime;
       layers.engine.resume();
       printTrackInfo(layers, trackLength, 'playing');
+      updateBridge('playing');
       const elapsed = Math.floor((Date.now() - startTime - pausedTime) / 1000);
       updateProgress(elapsed, trackLength);
     } else {
@@ -308,26 +333,31 @@ async function main() {
       pauseStartTime = Date.now();
       layers.engine.pause();
       printTrackInfo(layers, trackLength, 'paused');
+      updateBridge('paused');
       const elapsed = Math.floor((Date.now() - startTime - pausedTime) / 1000);
       updateProgress(elapsed, trackLength);
     }
   }
 
+
+
   async function handleQuit() {
     if (isQuitting) return;
     isQuitting = true;
-    
+
     clearInterval(progressInterval);
     printTrackInfo(layers, trackLength, 'stopping');
-    
+
     await stopLayers(layers);
-    
+
+    bridge.stop();
+
     // Restore terminal
     showCursor();
     if (process.stdin.isTTY) {
       process.stdin.setRawMode(false);
     }
-    
+
     clearScreen();
     console.log(`\n  ${c.purple}Goodbye!${c.reset}\n`);
     process.exit(0);
