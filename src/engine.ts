@@ -200,20 +200,6 @@ export class Engine {
     this.clock.start();
   }
 
-  pause() {
-    this.clock.pause();
-    this.ctx.suspend();
-  }
-
-  resume() {
-    this.ctx.resume();
-    this.clock.resume();
-  }
-
-  get paused(): boolean {
-    return this.clock.paused;
-  }
-
   stop() {
     this.clock.stop();
     
