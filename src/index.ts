@@ -10,6 +10,7 @@ import { PadLayer } from './layers/pad';
 import { ArpLayer } from './layers/arp';
 import { BeatLayer } from './layers/beat';
 import { TextureLayer } from './layers/texture';
+import { MotifLayer } from './layers/motif';
 
 // ANSI escape codes
 const c = {
@@ -86,6 +87,7 @@ interface AudioLayers {
   texture: TextureLayer;
   arp: ArpLayer;
   beat: BeatLayer;
+  motif: MotifLayer;
 }
 
 function createLayers(config: Partial<EngineConfig>): AudioLayers {
@@ -103,9 +105,12 @@ function createLayers(config: Partial<EngineConfig>): AudioLayers {
   const beat = new BeatLayer(engine);
   engine.registerLayer(beat);
 
+  const motif = new MotifLayer(engine);
+  engine.registerLayer(motif);
+
   engine.start();
 
-  return { engine, pad, texture, arp, beat };
+  return { engine, pad, texture, arp, beat, motif };
 }
 
 function stopLayers(layers: AudioLayers): Promise<void> {
@@ -114,6 +119,7 @@ function stopLayers(layers: AudioLayers): Promise<void> {
     layers.texture.stop();
     layers.arp.stop();
     layers.beat.stop();
+    layers.motif.stop();
     layers.engine.stop();
     
     setTimeout(resolve, 2500);
