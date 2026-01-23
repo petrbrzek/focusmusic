@@ -50,7 +50,7 @@ export class Engine {
 
   constructor(config: Partial<EngineConfig> = {}) {
     this.config = {
-      bpm: config.bpm ?? 88,
+      bpm: config.bpm ?? 89,
       volume: config.volume ?? 75,
       seed: config.seed,
       latencyHint: config.latencyHint,
