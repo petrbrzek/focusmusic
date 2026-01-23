@@ -1,11 +1,15 @@
 # Changelog
 
+## [1.5.0] - 2026-01-23
+
+### Added
+- Optional macOS media bridge install (`--install-media`) to enable media keys.
+- Media key play/pause support to suspend/resume playback.
+
 ## [1.4.0] - 2026-01-23
 
 ### Added
 - Motif layer for slow, song-like melodic themes.
-- Optional macOS media bridge install (`--install-media`) to enable media keys.
-- Media key play/pause support to suspend/resume playback.
 
 ## [1.3.0] - 2026-01-06
 
