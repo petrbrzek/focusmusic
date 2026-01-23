@@ -5,7 +5,12 @@
 
 import { parseArgs } from 'util';
 import * as readline from 'readline';
+import { spawnSync } from 'child_process';
+import { existsSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
 import { Engine, type EngineConfig } from './engine';
+import { MediaBridge, type BridgeStatus } from './bridge';
 import { PadLayer } from './layers/pad';
 import { ArpLayer } from './layers/arp';
 import { BeatLayer } from './layers/beat';
@@ -57,6 +62,42 @@ function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
+function getMediaBridgePaths() {
+  const dir = dirname(fileURLToPath(import.meta.url));
+  return {
+    bridgeSrc: join(dir, 'bridge', 'media-bridge.swift'),
+    bridgeOut: join(dir, 'bridge', 'media-bridge'),
+  };
+}
+
+function installMediaBridge() {
+  if (process.platform !== 'darwin') {
+    console.error('Media bridge is only supported on macOS.');
+    process.exit(1);
+  }
+
+  const { bridgeSrc, bridgeOut } = getMediaBridgePaths();
+  if (!existsSync(bridgeSrc)) {
+    console.error('Media bridge source not found.');
+    process.exit(1);
+  }
+
+  const swiftCheck = spawnSync('swiftc', ['--version'], { stdio: 'ignore' });
+  if (swiftCheck.status !== 0) {
+    console.error('swiftc not found. Install Xcode Command Line Tools: xcode-select --install');
+    process.exit(1);
+  }
+
+  console.log('Building media bridge...');
+  const result = spawnSync('swiftc', [bridgeSrc, '-o', bridgeOut], { stdio: 'inherit' });
+  if (result.status !== 0) {
+    console.error('Media bridge build failed.');
+    process.exit(1);
+  }
+
+  console.log(`Media bridge installed: ${bridgeOut}`);
+}
+
 function printHelp() {
   console.log(`
   ${c.bold}${c.purple}focusmusic${c.reset} - deep generative electronic music
@@ -67,6 +108,7 @@ function printHelp() {
     --bpm <number>      Set tempo (70-120, default: 89)
     --volume <number>   Master volume (0-100, default: 75)
     --latency <mode>    Audio latency: interactive | balanced | playback (default: playback)
+    --install-media     Build macOS media bridge for media keys
     --diagnostics       Print scheduler headroom warnings (helps debug crackles)
     --help, -h          Show this help message
 
@@ -139,14 +181,20 @@ function showCursor() {
   process.stdout.write(c.showCursor);
 }
 
-function printTrackInfo(layers: AudioLayers, trackLength: number, status: 'playing' | 'switching' | 'stopping' = 'playing') {
+function printTrackInfo(
+  layers: AudioLayers,
+  trackLength: number,
+  status: 'playing' | 'paused' | 'switching' | 'stopping' = 'playing',
+) {
   const state = layers.engine.state;
   const config = layers.engine.config;
 
   const statusIcon = status === 'playing' ? `${c.green}▶${c.reset}`
+                   : status === 'paused' ? `${c.yellow}⏸${c.reset}`
                    : status === 'switching' ? `${c.yellow}◆${c.reset}`
                    : `${c.red}■${c.reset}`;
   const statusText = status === 'playing' ? 'Playing'
+                   : status === 'paused' ? 'Paused'
                    : status === 'switching' ? 'Switching...'
                    : 'Stopping...';
 
@@ -186,6 +234,7 @@ async function main() {
       bpm: { type: 'string' },
       volume: { type: 'string' },
       latency: { type: 'string' },
+      'install-media': { type: 'boolean' },
       diagnostics: { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
     },
@@ -193,6 +242,11 @@ async function main() {
 
   if (values.help) {
     printHelp();
+    process.exit(0);
+  }
+
+  if (values['install-media']) {
+    installMediaBridge();
     process.exit(0);
   }
 
@@ -247,6 +301,22 @@ async function main() {
   let startTime = Date.now();
   let isQuitting = false;
   let isTransitioning = false;
+  let isPaused = false;
+  let pauseStartTime = 0;
+  let pausedTime = 0;
+  let bridgeStatus: BridgeStatus = 'playing';
+  const bridge = MediaBridge.isAvailable()
+    ? new MediaBridge({
+        onPlay: () => {
+          if (isPaused) handlePause();
+        },
+        onPause: () => {
+          if (!isPaused) handlePause();
+        },
+        onToggle: () => handlePause(),
+        onNext: () => handleNext(),
+      })
+    : null;
 
   // Setup raw keyboard input
   readline.emitKeypressEvents(process.stdin);
@@ -260,14 +330,22 @@ async function main() {
   // Print initial info (with small delay for layer names to populate)
   setTimeout(() => {
     printTrackInfo(layers, trackLength, 'playing');
+    updateBridge();
   }, 150);
+
+  function getElapsedSeconds() {
+    const now = Date.now();
+    const pausedOffset = isPaused ? now - pauseStartTime : 0;
+    return Math.floor((now - startTime - pausedTime - pausedOffset) / 1000);
+  }
 
   // Progress update interval
   const progressInterval = setInterval(() => {
     if (isQuitting || isTransitioning) return;
 
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
+    const elapsed = getElapsedSeconds();
     updateProgress(elapsed, trackLength);
+    updateBridge();
 
     // Auto-advance when track ends
     if (elapsed >= trackLength) {
@@ -275,9 +353,25 @@ async function main() {
     }
   }, 1000);
 
+  function updateBridge() {
+    if (!bridge) return;
+    const elapsed = getElapsedSeconds();
+    bridge.update({
+      title: 'Focus Music',
+      artist: 'focusmusic',
+      duration: trackLength,
+      elapsed,
+      status: bridgeStatus,
+    });
+  }
+
   async function handleNext() {
     if (isQuitting || isTransitioning) return;
     isTransitioning = true;
+    isPaused = false;
+    pausedTime = 0;
+    pauseStartTime = 0;
+    bridgeStatus = 'playing';
 
     printTrackInfo(layers, trackLength, 'switching');
 
@@ -290,7 +384,31 @@ async function main() {
 
     setTimeout(() => {
       printTrackInfo(layers, trackLength, 'playing');
+      updateBridge();
     }, 150);
+  }
+
+  function handlePause() {
+    if (isTransitioning || isQuitting) return;
+
+    if (isPaused) {
+      isPaused = false;
+      pausedTime += Date.now() - pauseStartTime;
+      layers.engine.resume();
+      bridgeStatus = 'playing';
+      printTrackInfo(layers, trackLength, 'playing');
+      updateProgress(getElapsedSeconds(), trackLength);
+      updateBridge();
+      return;
+    }
+
+    isPaused = true;
+    pauseStartTime = Date.now();
+    layers.engine.pause();
+    bridgeStatus = 'paused';
+    printTrackInfo(layers, trackLength, 'paused');
+    updateProgress(getElapsedSeconds(), trackLength);
+    updateBridge();
   }
 
   async function handleQuit() {
@@ -310,6 +428,7 @@ async function main() {
     
     clearScreen();
     console.log(`\n  ${c.purple}Goodbye!${c.reset}\n`);
+    bridge?.stop();
     process.exit(0);
   }
 

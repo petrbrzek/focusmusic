@@ -45,6 +45,7 @@ export class Engine {
   
   config: EngineConfig;
   state: MusicState;
+  paused = false;
   
   private layers: ClockListener[] = [];
 
@@ -198,6 +199,27 @@ export class Engine {
 
   start() {
     this.clock.start();
+  }
+
+  pause() {
+    if (this.paused) return;
+    this.paused = true;
+    this.clock.stop();
+    this.ctx.suspend().catch(() => {
+      // Ignore suspend errors; audio will be stopped by clock.
+    });
+  }
+
+  resume() {
+    if (!this.paused) return;
+    this.paused = false;
+    this.ctx.resume()
+      .then(() => {
+        this.clock.start();
+      })
+      .catch(() => {
+        this.clock.start();
+      });
   }
 
   stop() {

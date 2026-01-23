@@ -53,6 +53,9 @@ focusmusic --latency playback --diagnostics
 
 # Show help
 focusmusic --help
+
+# Install macOS media bridge (optional)
+focusmusic --install-media
 ```
 
 ### Controls
@@ -67,6 +70,16 @@ focusmusic --help
 - [Bun](https://bun.sh) runtime (v1.0+)
 - macOS, Linux, or Windows
 - Audio output device
+
+### Optional: macOS media keys
+
+To enable media keys on macOS, install the local media bridge:
+
+```bash
+focusmusic --install-media
+```
+
+Requires Xcode Command Line Tools (`xcode-select --install`).
 
 ### Linux Notes
 
