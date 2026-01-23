@@ -46,6 +46,7 @@ export class Engine {
   config: EngineConfig;
   state: MusicState;
   paused = false;
+  private pausedGain: number | null = null;
   
   private layers: ClockListener[] = [];
 
@@ -205,21 +206,23 @@ export class Engine {
     if (this.paused) return;
     this.paused = true;
     this.clock.stop();
-    this.ctx.suspend().catch(() => {
-      // Ignore suspend errors; audio will be stopped by clock.
-    });
+    const now = this.ctx.currentTime;
+    this.pausedGain = this.master.gain.value;
+    this.master.gain.cancelScheduledValues(now);
+    this.master.gain.setValueAtTime(this.master.gain.value, now);
+    this.master.gain.linearRampToValueAtTime(0, now + 0.05);
   }
 
   resume() {
     if (!this.paused) return;
     this.paused = false;
-    this.ctx.resume()
-      .then(() => {
-        this.clock.start();
-      })
-      .catch(() => {
-        this.clock.start();
-      });
+    const now = this.ctx.currentTime;
+    const targetGain = this.pausedGain ?? this.master.gain.value;
+    this.pausedGain = null;
+    this.master.gain.cancelScheduledValues(now);
+    this.master.gain.setValueAtTime(this.master.gain.value, now);
+    this.master.gain.linearRampToValueAtTime(targetGain, now + 0.05);
+    this.clock.start();
   }
 
   stop() {

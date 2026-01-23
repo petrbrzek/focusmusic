@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.1] - 2026-01-23
+
+### Fixed
+- Pause/resume no longer locks up after longer pauses; audio now fades out/in without suspending the context.
+
 ## [1.5.0] - 2026-01-23
 
 ### Added
